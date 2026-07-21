@@ -71,22 +71,6 @@ Each folder represents an active learning track. As I progress, I'm adding:
 
 ---
 
-## Roadmap Status
-
-| Section | Status | Notes |
-|---|---|---|
-| Compute | 🔄 In Progress | EC2 labs, Auto Scaling policies |
-| Databases | 📋 Planned | RDS setup, DynamoDB patterns |
-| DevOps | 🔄 In Progress | GitHub Actions workflows |
-| Kubernetes | 📋 Planned | EKS cluster deployment |
-| Machine Learning | 🔄 In Progress | Bedrock & Lex experiments |
-| Networking | 🔄 In Progress | VPC design, 3-tier architecture |
-| Security | 📋 Planned | IAM deep-dive, compliance checks |
-| Terraform | 🔄 In Progress | Modular IaC patterns |
-
-**Legend:** 🔄 In Progress | ✅ Complete | 📋 Planned
-
----
 
 ## How to Navigate This Repo
 
