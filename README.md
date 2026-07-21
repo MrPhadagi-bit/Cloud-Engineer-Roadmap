@@ -69,16 +69,6 @@ Each folder represents an active learning track. As I progress, I'm adding:
 > 2. **Can you build real things?** → Terraform, K8s manifests, architecture docs
 > 3. **How do you organize technical work?** → Consistent structure, meaningful commits, living documentation
 
----
-
-
-## How to Navigate This Repo
-
-1. **Start with any `README.md` inside a domain folder** — each contains specific learning objectives and current work
-2. **Check the `/docs` or `/diagrams` subfolders** for architecture visuals
-3. **Look for `terraform/` or `scripts/` directories** for Infrastructure-as-Code and automation examples
-
----
 
 ## Connect
 
