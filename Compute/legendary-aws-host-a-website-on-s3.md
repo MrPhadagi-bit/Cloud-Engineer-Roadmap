@@ -1,6 +1,9 @@
-
-
 # Host a Website on Amazon S3
+
+> **A hands-on project demonstrating how to host a static website using Amazon S3, including bucket configuration, static website hosting, ACL management, and bucket policies.**
+
+---
+
 
 **Project Link:** [View Project](http://nextwork.ai/projects/aws-host-a-website-on-s3)
 
