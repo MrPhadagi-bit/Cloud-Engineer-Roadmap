@@ -118,15 +118,3 @@ To resolve this 403 Forbidden error, I updated the files inside our bucket too U
 ![Image](http://nextwork.ai/gleeful_navy_kind_rabbit/uploads/aws-host-a-website-on-s3_5d4474f9)
 
 ---
-
-## Bucket Policies
-
-### What I did in this extension
-
-### Understanding bucket policies
-
-### What my bucket policy does
-
----
-
----
