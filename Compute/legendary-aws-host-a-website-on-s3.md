@@ -118,3 +118,35 @@ To resolve this 403 Forbidden error, I updated the files inside our bucket too U
 ![Image](http://nextwork.ai/gleeful_navy_kind_rabbit/uploads/aws-host-a-website-on-s3_5d4474f9)
 
 ---
+## Challenges Faced & Solutions
+
+| Challenge | Solution |
+|---|---|
+| **403 Forbidden on endpoint** | Made individual objects public via ACLs; learned that bucket-level and object-level permissions are separate |
+| **Understanding ACLs vs. Bucket Policies** | Enabled ACLs for hands-on learning, with awareness that bucket policies are the modern best practice |
+| **Bucket name uniqueness** | Learned that S3 bucket names are globally unique across all AWS accounts and regions |
+
+---
+
+## Key Takeaways
+
+1. **S3 buckets are globally unique** — plan your naming strategy accordingly
+2. **Region proximity matters** — closer regions = lower latency + lower cost
+3. **Static website hosting requires three things:**
+   - Hosting enabled in Properties
+   - An index document specified
+   - Objects made publicly readable (via ACLs or bucket policies)
+4. **ACLs vs. Bucket Policies** — ACLs work for small projects, but bucket policies are the AWS-recommended approach for production
+5. **Permissions are layered** — bucket-level settings, object-level ACLs, and bucket policies all work together (or against each other if misconfigured)
+
+---
+
+## Project Status
+
+| Component | Status |
+|---|---|
+| S3 Bucket Creation |  Complete |
+| File Uploads |  Complete |
+| Static Website Hosting |  Complete |
+| Public Access Configuration | Complete |
+| Bucket Policies |  In Progress (Extension) |
