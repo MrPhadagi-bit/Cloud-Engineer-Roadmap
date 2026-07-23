@@ -1,4 +1,8 @@
+# Connect a Web App to Amazon Aurora
 
+> **A hands-on project demonstrating how to provision an Amazon Aurora database cluster, launch an EC2 instance, and establish secure connectivity between a web application server and a managed relational database.**
+
+---
 
 **Project Link:** [View Project](http://nextwork.ai/projects/aws-databases-aurora)
 
