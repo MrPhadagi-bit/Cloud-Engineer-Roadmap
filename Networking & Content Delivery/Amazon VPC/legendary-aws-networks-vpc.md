@@ -106,4 +106,44 @@ To set up a VPC or a subnet, you can use the command... Make sure to avoid error
 
 ---
 
+## Challenges Faced & Solutions
+
+| Challenge | Solution |
+|---|---|
+| **Understanding CIDR notation** | Learned that `/16` = 65,536 IPs, `/24` = 256 IPs — planned subnet sizes accordingly |
+| **Public vs. private subnet routing** | Ensured only public subnets have the `0.0.0.0/0 → IGW` route; private subnets use local routes only |
+| **CLI syntax errors** | Used CloudShell for immediate feedback; referenced AWS CLI documentation for correct flag formatting |
+| **Resource dependencies** | Learned that IGW must be created before route table updates; VPC must exist before subnet creation |
+
 ---
+
+## Key Takeaways
+
+1. **VPC Is the Foundation** — Every AWS architecture starts with a well-designed VPC. Poor networking design creates security and scalability debt.
+
+2. **CIDR Planning Matters** — Choose IP ranges that accommodate future growth. `10.0.0.0/16` provides 65,536 addresses — enough for most workloads.
+
+3. **Subnet Segmentation = Security** — Public subnets for internet-facing resources, private subnets for sensitive backends. This is the core of defense-in-depth.
+
+4. **Internet Gateway Is One-Way** — Attaching an IGW doesn't automatically make everything public. Route tables control which subnets get internet access.
+
+5. **Multi-AZ = High Availability** — Distributing subnets across availability zones ensures fault tolerance. If AZ-1 fails, AZ-2 continues serving traffic.
+
+6. **CLI Enables Automation** — Console is for learning; CLI is for production. Scripting VPC creation ensures consistency across environments (dev, staging, prod).
+
+7. **Default VPC Is for Beginners** — Custom VPCs give you full control over routing, security, and compliance — required for enterprise workloads.
+
+---
+
+## Project Status
+
+| Component | Status |
+|---|---|
+| VPC Creation with Custom CIDR |  Complete |
+| Public Subnet Configuration |  Complete |
+| Private Subnet Configuration |  Complete |
+| Internet Gateway Creation & Attachment |  Complete |
+| Route Table Configuration |  Complete |
+| Auto-Assign Public IPv4 |  Complete |
+| AWS CLI / CloudShell Deployment |  In Progress (Extension) |
+
