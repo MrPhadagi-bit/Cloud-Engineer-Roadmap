@@ -1,6 +1,6 @@
 # Cloud Engineer Roadmap
 
-> **A structured, hands-on learning portfolio for cloud engineering — tracking practical progress across AWS infrastructure, DevOps automation, container orchestration, and applied ML services.**
+> **A structured, hands-on learning portfolio for cloud engineering  tracking practical progress across AWS infrastructure, DevOps automation, container orchestration, and applied ML services.**
 
 ---
 
