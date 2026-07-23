@@ -1,4 +1,7 @@
-# Build a Virtual Private Cloud
+# Build a Virtual Private Cloud (VPC)
+
+> **A hands-on project demonstrating AWS VPC architecture — including CIDR block design, public/private subnet segmentation, Internet Gateway configuration, and AWS CLI deployment.**
+
 
 **Project Link:** [View Project](http://nextwork.ai/projects/aws-networks-vpc)
 
