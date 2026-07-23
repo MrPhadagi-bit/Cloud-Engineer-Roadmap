@@ -71,4 +71,44 @@ Aurora Database uses clusters because it handlle large-scale applications and op
 
 ---
 
+## Challenges Faced & Solutions
+
+| Challenge | Solution |
+|---|---|
+| **Aurora setup requires EC2 first** | Learned that Security Group references require the EC2 SG to exist before Aurora SG rules can reference it |
+| **Understanding cluster vs. instance endpoints** | Cluster endpoint always points to the writer — use this in applications for automatic failover |
+| **Cost concerns for learning** | Identified Aurora Serverless and snapshot strategies to minimize expenses |
+| **Key pair management** | Generated a new key pair and securely stored the `.pem` file for SSH access |
+
 ---
+
+## Key Takeaways
+
+1. **Aurora Is Built for Scale** — Cluster architecture with separate read/write instances handles large-scale applications far better than single-instance databases.
+
+2. **Compute-Storage Separation** — Aurora decouples compute (instances) from storage (cluster volume). Failover is automatic and fast because storage persists independently.
+
+3. **Security Groups Are Your Firewall** — Aurora should only accept connections from the EC2 Security Group. Never expose Port 3306 to the open internet.
+
+4. **Two-Tier Architecture Pattern** — Public-facing EC2 (web tier) + private Aurora (data tier) is the standard pattern for secure web applications.
+
+5. **Endpoints Abstract Failover** — Use the **Cluster Endpoint** in your application, not individual instance endpoints. Aurora handles the routing automatically.
+
+6. **Cost Awareness Is Critical** — Managed databases are powerful but expensive. Use Serverless, snapshots, and billing alerts to control costs.
+
+7. **Key Pairs = Trust** — Your `.pem` key pair is the root of trust for SSH access. Store it securely and never share it.
+
+---
+
+## Project Status
+
+| Component | Status |
+|---|---|
+| Aurora Cluster Creation |  Complete |
+| EC2 Instance Launch |  Complete |
+| Key Pair Generation |  Complete |
+| Security Group Configuration (EC2) |  Complete |
+| Security Group Configuration (Aurora) |  Complete |
+| Aurora Endpoint Configuration |  Complete |
+| Application Connectivity Testing |  Planned |
+| Read Replica Scaling |  Planned |
