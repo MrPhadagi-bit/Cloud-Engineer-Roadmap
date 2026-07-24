@@ -1,7 +1,4 @@
 
-
-# Build a Chatbot with Amazon Lex
-
 **Project Link:** [View Project](http://nextwork.ai/projects/aws-ai-lex1)
 
 **Author:** phadagi mannda raven  
