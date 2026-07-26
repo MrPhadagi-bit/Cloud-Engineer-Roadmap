@@ -98,3 +98,251 @@ Once we uploaded the malware, GuardDuty instanlty triggered a finding called Obj
 ![Image](http://nextwork.ai/gleeful_navy_kind_rabbit/uploads/aws-security-guardduty_sm42x3y4)
 
 ---
+
+## Infrastructure as Code
+
+### Overview
+
+The following sections provide declarative infrastructure definitions for reproducing this GuardDuty lab using **AWS CloudFormation** and **HashiCorp Terraform**. Both templates provision:
+
+- An Amazon GuardDuty detector (enabled by default)
+- GuardDuty Malware Protection for S3
+- An S3 bucket for exfiltration targets
+- An IAM instance profile for the vulnerable EC2 application
+- A VPC with public subnet for the OWASP Juice Shop deployment
+
+> **Note:** The OWASP Juice Shop application itself is typically deployed via a pre-built CloudFormation template or container image. The snippets below provision the supporting AWS infrastructure and GuardDuty configuration.
+
+---
+
+### CloudFormation (YAML)
+
+```yaml
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  GuardDuty threat detection lab: VPC, S3 bucket, IAM instance profile,
+  GuardDuty detector, and Malware Protection for S3.
+
+Parameters:
+  LabPrefix:
+    Type: String
+    Default: guardduty-lab
+    Description: Prefix for all resource names.
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnetCidr:
+    Type: String
+    Default: 10.0.1.0/24
+
+Resources:
+  # ------------------------------------------------------------------
+  # Networking
+  # ------------------------------------------------------------------
+  LabVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${LabPrefix}-vpc"
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref LabVPC
+      CidrBlock: !Ref PublicSubnetCidr
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${LabPrefix}-public-subnet"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${LabPrefix}-igw"
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref LabVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref LabVPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${LabPrefix}-public-rt"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # ------------------------------------------------------------------
+  # S3 Bucket (Exfiltration Target)
+  # ------------------------------------------------------------------
+  ExfilBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${LabPrefix}-exfil-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Project
+          Value: GuardDuty-Lab
+
+  # ------------------------------------------------------------------
+  # IAM Instance Profile for Vulnerable EC2
+  # ------------------------------------------------------------------
+  JuiceShopInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${LabPrefix}-juiceshop-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+      Tags:
+        - Key: Project
+          Value: GuardDuty-Lab
+
+  JuiceShopInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${LabPrefix}-juiceshop-profile"
+      Roles:
+        - !Ref JuiceShopInstanceRole
+
+  # ------------------------------------------------------------------
+  # Security Group
+  # ------------------------------------------------------------------
+  JuiceShopSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${LabPrefix}-juiceshop-sg"
+      GroupDescription: Allow HTTP and SSH
+      VpcId: !Ref LabVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${LabPrefix}-juiceshop-sg"
+
+  # ------------------------------------------------------------------
+  # GuardDuty Detector
+  # ------------------------------------------------------------------
+  GuardDutyDetector:
+    Type: AWS::GuardDuty::Detector
+    Properties:
+      Enable: true
+      FindingPublishingFrequency: FIFTEEN_MINUTES
+      DataSources:
+        S3Logs:
+          Enable: true
+        Kubernetes:
+          AuditLogs:
+            Enable: false
+        MalwareProtection:
+          ScanEc2InstanceWithFindings:
+            Enable: true
+
+  # ------------------------------------------------------------------
+  # GuardDuty Malware Protection for S3
+  # ------------------------------------------------------------------
+  GuardDutyMalwareProtectionPlan:
+    Type: AWS::GuardDuty::MalwareProtectionPlan
+    Properties:
+      Role: !GetAtt GuardDutyMalwareProtectionRole.Arn
+      ProtectedResource:
+        S3Bucket:
+          BucketName: !Ref ExfilBucket
+      Actions:
+        - Tagging
+      Tags:
+        - Key: Project
+          Value: GuardDuty-Lab
+
+  GuardDutyMalwareProtectionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${LabPrefix}-guardduty-malware-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: malware-protection-plan.guardduty.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonGuardDutyMalwareProtectionPolicy
+      Tags:
+        - Key: Project
+          Value: GuardDuty-Lab
+
+Outputs:
+  VpcId:
+    Description: Lab VPC ID
+    Value: !Ref LabVPC
+  PublicSubnetId:
+    Description: Public subnet ID
+    Value: !Ref PublicSubnet
+  ExfilBucketName:
+    Description: S3 bucket for exfiltration testing
+    Value: !Ref ExfilBucket
+  InstanceProfileArn:
+    Description: IAM instance profile for Juice Shop EC2
+    Value: !GetAtt JuiceShopInstanceProfile.Arn
+  GuardDutyDetectorId:
+    Description: GuardDuty detector ID
+    Value: !Ref GuardDutyDetector
+```
+
+**Deployment:**
+
+```bash
+aws cloudformation deploy \
+  --template-file guardduty-lab.yaml \
+  --stack-name guardduty-lab-stack \
+  --capabilities CAPABILITY_NAMED_IAM
+```
+
+---
+
