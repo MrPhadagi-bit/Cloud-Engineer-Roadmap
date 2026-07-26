@@ -346,3 +346,364 @@ aws cloudformation deploy \
 
 ---
 
+---
+
+### Terraform (HCL)
+
+```hcl
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
+# ------------------------------------------------------------------
+# Variables
+# ------------------------------------------------------------------
+variable "aws_region" {
+  description = "AWS region for resource deployment"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "lab_prefix" {
+  description = "Prefix for all resource names"
+  type        = string
+  default     = "guardduty-lab"
+}
+
+variable "vpc_cidr" {
+  description = "CIDR block for the lab VPC"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "public_subnet_cidr" {
+  description = "CIDR block for the public subnet"
+  type        = string
+  default     = "10.0.1.0/24"
+}
+
+# ------------------------------------------------------------------
+# Data Sources
+# ------------------------------------------------------------------
+data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+# ------------------------------------------------------------------
+# Networking
+# ------------------------------------------------------------------
+resource "aws_vpc" "lab_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = "${var.lab_prefix}-vpc"
+  }
+}
+
+resource "aws_subnet" "public_subnet" {
+  vpc_id                  = aws_vpc.lab_vpc.id
+  cidr_block              = var.public_subnet_cidr
+  map_public_ip_on_launch = true
+  availability_zone       = data.aws_availability_zones.available.names[0]
+
+  tags = {
+    Name = "${var.lab_prefix}-public-subnet"
+  }
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.lab_vpc.id
+
+  tags = {
+    Name = "${var.lab_prefix}-igw"
+  }
+}
+
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.lab_vpc.id
+
+  tags = {
+    Name = "${var.lab_prefix}-public-rt"
+  }
+}
+
+resource "aws_route" "public_internet" {
+  route_table_id         = aws_route_table.public_rt.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.igw.id
+}
+
+resource "aws_route_table_association" "public_assoc" {
+  subnet_id      = aws_subnet.public_subnet.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+# ------------------------------------------------------------------
+# S3 Bucket (Exfiltration Target)
+# ------------------------------------------------------------------
+resource "aws_s3_bucket" "exfil_bucket" {
+  bucket = "${var.lab_prefix}-exfil-${data.aws_caller_identity.current.account_id}"
+
+  tags = {
+    Project = "GuardDuty-Lab"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "exfil_bucket_pab" {
+  bucket = aws_s3_bucket.exfil_bucket.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "exfil_bucket_sse" {
+  bucket = aws_s3_bucket.exfil_bucket.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_versioning" "exfil_bucket_versioning" {
+  bucket = aws_s3_bucket.exfil_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# ------------------------------------------------------------------
+# IAM Instance Profile for Vulnerable EC2
+# ------------------------------------------------------------------
+resource "aws_iam_role" "juiceshop_role" {
+  name = "${var.lab_prefix}-juiceshop-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  managed_policy_arns = [
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonS3ReadOnlyAccess"
+  ]
+
+  tags = {
+    Project = "GuardDuty-Lab"
+  }
+}
+
+resource "aws_iam_instance_profile" "juiceshop_profile" {
+  name = "${var.lab_prefix}-juiceshop-profile"
+  role = aws_iam_role.juiceshop_role.name
+}
+
+# ------------------------------------------------------------------
+# Security Group
+# ------------------------------------------------------------------
+resource "aws_security_group" "juiceshop_sg" {
+  name        = "${var.lab_prefix}-juiceshop-sg"
+  description = "Allow HTTP and SSH"
+  vpc_id      = aws_vpc.lab_vpc.id
+
+  ingress {
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.lab_prefix}-juiceshop-sg"
+  }
+}
+
+# ------------------------------------------------------------------
+# GuardDuty Detector
+# ------------------------------------------------------------------
+resource "aws_guardduty_detector" "main" {
+  enable                       = true
+  finding_publishing_frequency = "FIFTEEN_MINUTES"
+
+  datasources {
+    s3_logs {
+      enable = true
+    }
+    kubernetes {
+      audit_logs {
+        enable = false
+      }
+    }
+    malware_protection {
+      scan_ec2_instance_with_findings {
+        enable = true
+      }
+    }
+  }
+}
+
+# ------------------------------------------------------------------
+# GuardDuty Malware Protection for S3
+# ------------------------------------------------------------------
+resource "aws_iam_role" "guardduty_malware_role" {
+  name = "${var.lab_prefix}-guardduty-malware-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "malware-protection-plan.guardduty.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  managed_policy_arns = [
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonGuardDutyMalwareProtectionPolicy"
+  ]
+
+  tags = {
+    Project = "GuardDuty-Lab"
+  }
+}
+
+resource "aws_guardduty_malware_protection_plan" "s3_protection" {
+  role = aws_iam_role.guardduty_malware_role.arn
+
+  protected_resource {
+    s3_bucket {
+      bucket_name = aws_s3_bucket.exfil_bucket.bucket
+    }
+  }
+
+  actions {
+    tagging {
+      status = "ENABLED"
+    }
+  }
+}
+
+# ------------------------------------------------------------------
+# Outputs
+# ------------------------------------------------------------------
+output "vpc_id" {
+  description = "Lab VPC ID"
+  value       = aws_vpc.lab_vpc.id
+}
+
+output "public_subnet_id" {
+  description = "Public subnet ID"
+  value       = aws_subnet.public_subnet.id
+}
+
+output "exfil_bucket_name" {
+  description = "S3 bucket for exfiltration testing"
+  value       = aws_s3_bucket.exfil_bucket.bucket
+}
+
+output "instance_profile_arn" {
+  description = "IAM instance profile for Juice Shop EC2"
+  value       = aws_iam_instance_profile.juiceshop_profile.arn
+}
+
+output "guardduty_detector_id" {
+  description = "GuardDuty detector ID"
+  value       = aws_guardduty_detector.main.id
+}
+```
+
+**Deployment:**
+
+```bash
+terraform init
+terraform plan
+terraform apply
+```
+
+---
+
+## IaC Resource Mapping
+
+| Manual Console Step | CloudFormation Resource | Terraform Resource |
+|---------------------|------------------------|--------------------|
+| Create VPC | `AWS::EC2::VPC` | `aws_vpc` |
+| Create public subnet | `AWS::EC2::Subnet` | `aws_subnet` |
+| Create internet gateway | `AWS::EC2::InternetGateway` | `aws_internet_gateway` |
+| Configure route table | `AWS::EC2::RouteTable` / `Route` | `aws_route_table` / `aws_route` |
+| Create S3 bucket | `AWS::S3::Bucket` | `aws_s3_bucket` |
+| Enable S3 SSE | `BucketEncryption` (nested) | `aws_s3_bucket_server_side_encryption_configuration` |
+| Create IAM role for EC2 | `AWS::IAM::Role` | `aws_iam_role` |
+| Create instance profile | `AWS::IAM::InstanceProfile` | `aws_iam_instance_profile` |
+| Create security group | `AWS::EC2::SecurityGroup` | `aws_security_group` |
+| Enable GuardDuty detector | `AWS::GuardDuty::Detector` | `aws_guardduty_detector` |
+| Enable Malware Protection for S3 | `AWS::GuardDuty::MalwareProtectionPlan` | `aws_guardduty_malware_protection_plan` |
+| Create IAM role for malware scanning | `AWS::IAM::Role` | `aws_iam_role` |
+
+---
+
+## Kill Chain Summary
+
+| Phase | Tactic | Technique | GuardDuty Coverage |
+|-------|--------|-----------|-------------------|
+| Initial Access | Exploit Public-Facing App | T1190 — SQL Injection | Indirect (via CloudTrail anomaly) |
+| Execution | Command and Scripting Interpreter | T1059 — Command Injection | Indirect (via CloudTrail anomaly) |
+| Credential Access | Unsecured Credentials | T1552 — Credentials in Files | `UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration.InsideAWS` |
+| Exfiltration | Exfiltration Over Web Service | T1567 — Exfiltration to Cloud Storage | `UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration.InsideAWS` |
+| Impact | Data Encrypted for Impact | N/A (test vector) | `Object:S3/MaliciousFile` |
+
+---
+
+## Summary
+
+| Phase | Key Action | Outcome |
+|-------|-----------|---------|
+| Lab Setup | CloudFormation deployment of vulnerable app + GuardDuty | Functional threat detection environment |
+| Attack Execution | SQLi → Command Injection → Credential Exfiltration | Successful compromise and lateral movement |
+| Detection | GuardDuty finding generation (~16 min) | High-severity credential exfiltration finding surfaced |
+| Extension | Malware Protection for S3 + EICAR test | `Object:S3/MaliciousFile` finding validated |
+| IaC | CloudFormation + Terraform templates | Reproducible, version-controlled lab infrastructure |
+
+---
+
